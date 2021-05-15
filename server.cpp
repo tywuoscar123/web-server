@@ -21,18 +21,46 @@ class HandleHttp{
         std::string url;
         std::string version; 
         HandleHttp(){
-            
+            url = "";
+            version = "";
         }
-        //in 
+        HandleHttp parse(std::string message){
+            HandleHttp *req = new HandleHttp();
+
+            int start = 0;
+            //look for space
+            int end = message.find(" ");
+            if(start >= message.length()){
+                return req;
+            }
+
+
+
+
+        }
+    
+        
 
 }
 
-void threadHandler(void *args){
+HandleHttp threadHandler(void *args){
 
+    HandleHttp *req = NULL;
     int connfd = (int)args;
-    char rcv_buff[BUFFERSIZE] = {0};
-    
+    int buffSize = 0;
+    char buff[BUFFERSIZE] = {0};
+    std::string message = "";
 
+    //try to get response, break when get '\n'
+    while(1){
+        buffSize += recv(connfd, buff, BUFFERSIZE - 1, 0);
+        message += buff;
+        if(buffSize && buff[buffSize - 1] == '\n'){
+            break;
+        }
+    }
+    req = req->parse(message);
+    return req;
 }
 
 int main(int argc, char **argv){
@@ -82,10 +110,6 @@ int main(int argc, char **argv){
         inet_ntop(AF_INET, &(cliaddr.sin_addr), ip_str, INET_ADDRSTRLEN);
         std::cout << "Incoming connection from: " << ip_str << "with fd: \n" <<   << ntohs(cliaddr.sin_port) << connfd;
     
-        std::thread newReq ()
-        if (thread(&threads[threads_count], NULL, request_func, (void *)connfd) != 0) {
-        printf("Error when creating thread %d\n", threads_count);
-        return 0;
-        }
+        std::thread newReq (threadHandler, connfd);
     }
 }
