@@ -7,10 +7,11 @@
 #include <thread>
 #include <iostream>
 #include <limits>
+#include <arpa/inet.h>
 
 #define SERVER_PORT (12345)
 #define LISTENNQ (5)
-#define BUFFERSIZE (8192);
+#define BUFFERSIZE (8192)
 #define MAXTHREAD (5)
 
 
@@ -18,35 +19,73 @@
 class HandleHttp{
     
     public:
-        std::string url;
+        std::string url_path;
         std::string version; 
+        std::string method;
         HandleHttp(){
-            url = "";
+            url_path = "";
             version = "";
+            method = "";
         }
-        HandleHttp parse(std::string message){
+        HandleHttp *parse(std::string message){
             HandleHttp *req = new HandleHttp();
+            const std::string space = " ";
+            const std::string nextLine = "\r\n";
+            int start_get = 0;
+            //look for end line, get whole line
+            int end_line = message.find(nextLine);
+            if(start_get >= message.length() || end_line == std::string::npos){
+                std::cout<<"Error: at getting method";
+                delete req;
+                req = NULL;
+                return req;
+            }
+            std::string line = message.substr(start_get, end_line);
 
-            int start = 0;
-            //look for space
-            int end = message.find(" ");
-            if(start >= message.length()){
+            //get method
+            int part_end = line.find(space);
+
+            //check if there is are still items left in line
+            if(part_end == std::string::npos){
+                std::cout<<"Error: at getting method";
+                delete req;
+                req = NULL;
+                return req;
+            }
+            req->method = line.substr(start_get, part_end);
+            if(req->method != "GET"){
+                std::cout << "Error: Not GET";
+                delete req;
+                req = NULL;
                 return req;
             }
 
+            //get url path in request
 
+            //check if there are still items left in line
+            if(part_end + 1 >= line.length()){
+                std::cout<<"Error: at getting url";
+                delete req;
+                req = NULL;
+                return req;
+            }
+            //remove method from line
+            std::string tmp = line.substr(part_end + 1, end_line);
+            part_end = tmp.find(space);
+            req->url_path = tmp.substr(start_get, part_end);
 
+            //get version
+            req->version = tmp.substr(part_end + 1, end_line);
 
-        }
+            return req;
     
-        
+        }
+};
 
-}
 
-HandleHttp threadHandler(void *args){
+void threadHandler(int connfd){
 
     HandleHttp *req = NULL;
-    int connfd = (int)args;
     int buffSize = 0;
     char buff[BUFFERSIZE] = {0};
     std::string message = "";
@@ -60,7 +99,21 @@ HandleHttp threadHandler(void *args){
         }
     }
     req = req->parse(message);
-    return req;
+    std::cout << req->method;
+    std::cout << "\n";
+    std::cout << req->url_path;
+    std::cout << "\n";
+    std::cout << req->version;
+    std::cout << "\n";
+
+    generateResponse(req);
+
+}
+
+void genrerateResponse(HandleHttp *req){
+
+    
+
 }
 
 int main(int argc, char **argv){
@@ -108,8 +161,10 @@ int main(int argc, char **argv){
 
         /* print client (remote side) address (IP : port) */
         inet_ntop(AF_INET, &(cliaddr.sin_addr), ip_str, INET_ADDRSTRLEN);
-        std::cout << "Incoming connection from: " << ip_str << "with fd: \n" <<   << ntohs(cliaddr.sin_port) << connfd;
+        std::cout << "Incoming connection from: " << ip_str << " with fd: \n" << ntohs(cliaddr.sin_port) << connfd;
+        std::cout << "\n";
     
         std::thread newReq (threadHandler, connfd);
+        newReq.detach();
     }
 }
