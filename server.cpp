@@ -8,6 +8,9 @@
 #include <iostream>
 #include <limits>
 #include <arpa/inet.h>
+#include <chrono>
+#include <ctime>
+#include <unistd.h>
 
 #define SERVER_PORT (12345)
 #define LISTENNQ (5)
@@ -19,6 +22,10 @@
 class HandleHttp{
     
     public:
+        //map all files
+        static const std::map<std::string, std::string> FILE_TYPES{
+            {txt, text/plain}
+        }
         std::string url_path;
         std::string version; 
         std::string method;
@@ -35,7 +42,7 @@ class HandleHttp{
             //look for end line, get whole line
             int end_line = message.find(nextLine);
             if(start_get >= message.length() || end_line == std::string::npos){
-                std::cout<<"Error: at getting method";
+                std::cout<<"Error: at getting line";
                 delete req;
                 req = NULL;
                 return req;
@@ -53,12 +60,6 @@ class HandleHttp{
                 return req;
             }
             req->method = line.substr(start_get, part_end);
-            if(req->method != "GET"){
-                std::cout << "Error: Not GET";
-                delete req;
-                req = NULL;
-                return req;
-            }
 
             //get url path in request
 
@@ -80,6 +81,67 @@ class HandleHttp{
             return req;
     
         }
+
+        std::string getTime(){
+            time_t rawtime;
+            struct tm * timeinfo;
+            char buffer [80];
+
+            time (&rawtime);
+            timeinfo = gmtime(&rawtime);
+
+            strftime (buffer,80,"%a, %d %b %G %H:%M:%S GMT",timeinfo);
+
+            std::string timeString(buffer);
+            return timeString;
+        }
+
+        std::string generate404(){
+
+            std::string response;
+            response = this->version;
+            response +="  404 File Not Found\r\n";
+            response += "Date: " + getTime() + "\r\n";
+            response += "Server: tywuab \r\n";
+            response += "Content-Type: text/html; charset=utf-8\r\n";
+            response += "Content-Length: 23\r\n";
+            response += "\r\n";
+            response += "<h1>File Not Found</h1>";
+            return response;
+        }
+
+        std::string generate501(){
+
+                std::string response;
+                response = this->version;
+                response +="  501 Method Not Allowed\r\n";
+                response += "Date: " + getTime() + "\r\n";
+                response += "Server: tywuab \r\n";
+                response += "Content-Type: text/html; charset=utf-8\r\n";
+                response += "Content-Length: 27\r\n";
+                response += "\r\n";
+                response += "<h1>Method not allowed</h1>";
+                return response;
+        }
+
+        void sendResponse(int connfd, std::string response){
+            write(connfd, response.c_str(), response.length());
+            return;
+        }
+
+        void generateResponse(int connfd){
+            std::string response = " ";
+            //bad request if not get
+            if(this->method != "GET" && this->method == "POST"){
+                sendResponse(connfd, this->generate501());
+            }
+            char buff[BUFFERSIZE];
+            
+            sendResponse(connfd, this->generate404());
+            return;
+
+         }
+
 };
 
 
@@ -106,15 +168,10 @@ void threadHandler(int connfd){
     std::cout << req->version;
     std::cout << "\n";
 
-    generateResponse(req);
+    req->generateResponse(connfd);
 
 }
 
-void genrerateResponse(HandleHttp *req){
-
-    
-
-}
 
 int main(int argc, char **argv){
 
