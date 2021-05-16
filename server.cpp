@@ -14,6 +14,8 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <zlib.h>
+#include <iostream>
 
 #define SERVER_PORT (12345)
 #define LISTENNQ (5)
@@ -22,7 +24,16 @@
 
 
 std::map<std::string, std::string> FILE_TYPES{
+            {"css", "text/css"}
+            {"docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
             {"html", "text/html"},
+            {"gif", "image/gif"},
+            {"jpg", "image/jpg"},
+            {"mp3", "audio/mpeg"},
+            {"mp4", "video/mp4"},
+            {"pdf", "application/pdf"},
+            {"png", "image/png"},
+            {"pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"},
             {"txt", "text/plain"}
             
 };
@@ -40,6 +51,64 @@ class HandleHttp{
             version = "";
             method = "";
         }
+
+        std::string compress_string(const std::string& fileContent,int compressionlevel = Z_BEST_COMPRESSION){
+
+            z_stream zs;
+            memset(&zs, 0, sizeof(zs));
+
+            //init zip and settings
+            if (deflateInit2(&zs, compressionlevel, Z_DEFLATED, 31, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+                throw(std::runtime_error("deflateInit failed while compressing."));
+                 }
+
+            //configure gzip input
+            zs.next_in = (Bytef*)fileContent.data();
+            zs.avail_in = fileContent.size();
+
+            //define var
+            int ret;
+            char outbuffer[32768];
+            std::string compressedContent;
+
+            do {
+                    zs.next_out = reinterpret_cast<Bytef*>(outbuffer);
+                    zs.avail_out = sizeof(outbuffer);
+
+                    ret = deflate(&zs, Z_FINISH);
+
+                    if (compressedContent.size() < zs.total_out) {
+                        //append to output buffer
+                        compressedContent.append(outbuffer, zs.total_out - compressedContent.size());
+                     }
+            } while (ret == Z_OK);
+            //stop when ret != Z_OK, means reached the end
+
+            deflateEnd(&zs);
+
+
+            //check if ended compression successfully
+            if (ret != Z_STREAM_END) {
+                std::ostringstream oss;
+                oss << "Exception during zlib compression: (" << ret << ") " << zs.msg;
+                throw(std::runtime_error(oss.str()));
+            }
+
+            return compressedContent;
+
+        }
+
+        void writeToLog(std::string header){
+            std::ofstream logFile;
+            logFile.open("log.txt", std::ios::app);
+            if(!logFile.good()){
+                std::cout <<"Error: unable to open log";
+            }
+            logFile << header << "\n";
+            logFile.close();
+            return;
+        }
+
         HandleHttp *parse(std::string message){
             HandleHttp *req = new HandleHttp();
             const std::string space = " ";
@@ -49,8 +118,7 @@ class HandleHttp{
             int end_line = message.find(nextLine);
             if(start_get >= message.length() || end_line == std::string::npos){
                 std::cout<<"Error: at getting line";
-                delete req;
-                req = NULL;
+                req->method = "error";
                 return req;
             }
             std::string line = message.substr(start_get, end_line);
@@ -61,19 +129,18 @@ class HandleHttp{
             //check if there is are still items left in line
             if(part_end == std::string::npos){
                 std::cout<<"Error: at getting method";
-                delete req;
-                req = NULL;
+                req->method ="error";
                 return req;
             }
+            
             req->method = line.substr(start_get, part_end);
-
+            
             //get url path in request
 
             //check if there are still items left in line
             if(part_end + 1 >= line.length()){
                 std::cout<<"Error: at getting url";
-                delete req;
-                req = NULL;
+                req->method = "error";
                 return req;
             }
             //remove method from line
@@ -115,22 +182,39 @@ class HandleHttp{
             response += "Content-Type: text/html; charset=utf-8\r\n";
             response += "Content-Length: 23\r\n";
             response += "\r\n";
+            this->writeToLog(response);
             response += "<h1>File Not Found</h1>";
             return response;
         }
 
         std::string generate501(){
 
-                std::string response;
-                response = this->version;
-                response +="  501 Method Not Allowed\r\n";
-                response += "Date: " + getTime() + "\r\n";
-                response += "Server: tywuab \r\n";
-                response += "Content-Type: text/html; charset=utf-8\r\n";
-                response += "Content-Length: 27\r\n";
-                response += "\r\n";
-                response += "<h1>Method not allowed</h1>";
-                return response;
+            std::string response;
+            response = this->version;
+            response +="  501 Method Not Allowed\r\n";
+            response += "Date: " + getTime() + "\r\n";
+            response += "Server: tywuab \r\n";
+            response += "Content-Type: text/html; charset=utf-8\r\n";
+            response += "Content-Length: 27\r\n";
+            response += "\r\n";
+            this->writeToLog(response);
+            response += "<h1>Method not allowed</h1>";
+            return response;
+        }
+
+        std::string generate415(){
+
+            std::string response;
+            response = this->version;
+            response +="  415 Unsupported Media Type\r\n";
+            response += "Date: " + getTime() + "\r\n";
+            response += "Server: tywuab \r\n";
+            response += "Content-Type: text/html; charset=utf-8\r\n";
+            response += "Content-Length: 48\r\n";
+            response += "\r\n";
+            this->writeToLog(response);
+            response += "<h1>The file you specified is not supported</h1>";
+            return response;
         }
 
         void sendResponse(int connfd, std::string response){
@@ -140,16 +224,14 @@ class HandleHttp{
         }
 
         void generateResponse(int connfd){
-            std::cout<<"GENERATE RESPONSE";
-            std::cout << "\n";
             std::string response = " ";
 
             //bad request if not get
             if(this->method != "GET" && this->method == "POST"){
                 sendResponse(connfd, this->generate501());
+                close(connfd);
+                return;
             }
-            std:: cout<< "start normal response";
-            std::cout << "\n";
 
             //start file response
             char buff[BUFFERSIZE];
@@ -157,22 +239,24 @@ class HandleHttp{
             //get file type
             int extension_start = this->url_path.find(".");
             std::string fileType = this->url_path.substr(extension_start+1, this->url_path.length());
-            std::cout << "file type is :" << fileType;
-            std::cout << "\n";
+
+            //check if file extension is supported
+            if(FILE_TYPES.find(fileType) == FILE_TYPES.end()){
+                sendResponse(connfd, this->generate415());
+                close(connfd);
+                return;
+            }
+
             std::string contentType = FILE_TYPES[fileType];
-            std::cout << "content type is :" << contentType;
-            std::cout << "\n";
             int content_end = contentType.find("/");
             std::string filePath = this->url_path.substr(1, this->url_path.length());
-            std::cout << "filePath is :" << filePath;
-            std::cout << "\n";
-            std::cout << "condition is :" << contentType.substr(0, content_end);
-            std::cout << "\n";
 
+            //check if open as binary and set if want to compress binary only 
+            bool compress = true;
             auto flags = std::ifstream::in;
             if(contentType.substr(0, content_end) != "text"){
                 flags |= std::ifstream::binary;
-
+                compress = true;
             }
 
             //open file
@@ -183,8 +267,11 @@ class HandleHttp{
                 std::cout<<"Error: file not found";
                 std::cout << "\n";
                 sendResponse(connfd, this->generate404());
+                close(connfd);
                 return;
+
             }else{
+
                 //read file
                 std::stringstream fileContent;
                 fileContent << file.rdbuf();
@@ -192,25 +279,66 @@ class HandleHttp{
 
                 //get file content in string
                 std::string stringContent = fileContent.str();
-                std::cout<< "File content: "<< stringContent;
-                std::cout<< "\n";
                 std::string contentLength = std::to_string(stringContent.length());
-                //generate response
-                std::string response = "HTTP/1.1 200 OK\r\n";
-                response += "Date: " + getTime() + "\r\n";
-                response += "Server: tywuab\r\n";
-                response += "Content-Type: " + contentType + "\r\n";
-                response += "Content-Length: " + contentLength + "\r\n";
-                response += "\r\n";
-                response += fileContent.str();
+                
+                //check if need to compress, this is for when you only want to compress binary or text files
+                if(true){
+                    std::string compressed_content = compress_string(stringContent);
+                    std::string compressed_size = std::to_string(compressed_content.length());
 
-                std::cout<< "Response: "<< response;
-                std::cout<< "\n";
-                sendResponse(connfd, response);
-                return;
+
+                    //=========[Debug]=============
+                    //check if compression is effective
+
+                    std::cout<< "COMPRESSED \n\n";
+                    if(std::stoi(compressed_size) < std::stoi(contentLength)){
+                        std::cout<< "COMPRESSION OK \n";
+                        std::cout<< "COMPRESSION OK \n";
+                        std::cout<< "COMPRESSION OK \n";
+                    }else{
+                        std::cout<< "COMPRESSION FAILED \n";
+                        std::cout<< "COMPRESSION FAILED \n";
+                        std::cout<< "COMPRESSION FAILED \n";
+                    }
+
+                    //Write response for compressed
+                    std::string response = this->version;
+                    response += " 200 OK\r\n";
+                    response += "Date: " + getTime() + "\r\n";
+                    response += "Server: tywuab\r\n";
+                    response += "Content-Encoding: gzip\r\n";
+                    response += "Content-Length: " + compressed_size + "\r\n";
+
+                    //write header to log
+                    this->writeToLog(response + "Compression: TRUE \r\n");
+
+                    //complete response
+                    response += "\r\n";
+                    response += compressed_content;
+                    sendResponse(connfd, response);
+                    close(connfd);
+                    return;
+
+                }else{
+                    //generate response if don't need to compress
+                    std::string response = this->version;
+                    response += " 200 OK\r\n";
+                    response += "Date: " + getTime() + "\r\n";
+                    response += "Server: tywuab\r\n";
+                    response += "Content-Type: " + contentType + "\r\n";
+                    response += "Content-Length: " + contentLength + "\r\n";
+                    
+                    //write header to log
+                    this->writeToLog(response + "Compression: TRUE \r\n");
+
+                    //comlete response
+                    response += "\r\n";
+                    response += stringContent;
+                    sendResponse(connfd, response);
+                    close(connfd);
+                    return;
+                }
             }
-            close(connfd);
-            return;
          }
 
 };
