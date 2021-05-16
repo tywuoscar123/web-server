@@ -24,17 +24,27 @@
 
 
 std::map<std::string, std::string> FILE_TYPES{
-            {"css", "text/css"}
+            {"css", "text/css"},
             {"docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
             {"html", "text/html"},
             {"gif", "image/gif"},
             {"jpg", "image/jpg"},
+            {"js", "text/javascript"},
             {"mp3", "audio/mpeg"},
             {"mp4", "video/mp4"},
             {"pdf", "application/pdf"},
             {"png", "image/png"},
             {"pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"},
-            {"txt", "text/plain"}
+            {"txt", "text/plain"},
+            {"wav", "audio/wav"},
+            {"weba", "audio/webm"},
+            {"webm", " video/webm"},
+            {"webp", "image/webp"},
+            {"xhtml", "application/xhtml+xml"},
+            {"xls", "application/vnd.ms-excel"},
+            {"xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+            {"zip", "application/zip"},
+            {"7z", "application/x-7z-compressed"}
             
 };
 
@@ -46,10 +56,16 @@ class HandleHttp{
         std::string url_path;
         std::string version; 
         std::string method;
+        std::string ip_str;
+        std::string errorMessage;
+        bool error;
         HandleHttp(){
             url_path = "";
             version = "";
             method = "";
+            ip_str = "";
+            errorMessage = "";
+            error = false;
         }
 
         std::string compress_string(const std::string& fileContent,int compressionlevel = Z_BEST_COMPRESSION){
@@ -109,8 +125,13 @@ class HandleHttp{
             return;
         }
 
-        HandleHttp *parse(std::string message){
+
+
+
+        HandleHttp *parse(std::string message, std::string(ip_str)){
             HandleHttp *req = new HandleHttp();
+            req->ip_str = ip_str;
+            std::cout << "PRINT IP\nPRINT IP\nPRINT IP\n"<< req->ip_str;
             const std::string space = " ";
             const std::string nextLine = "\r\n";
             int start_get = 0;
@@ -118,7 +139,8 @@ class HandleHttp{
             int end_line = message.find(nextLine);
             if(start_get >= message.length() || end_line == std::string::npos){
                 std::cout<<"Error: at getting line";
-                req->method = "error";
+                req->errorMessage = "Error at getting line";
+                req->error = true;
                 return req;
             }
             std::string line = message.substr(start_get, end_line);
@@ -129,7 +151,8 @@ class HandleHttp{
             //check if there is are still items left in line
             if(part_end == std::string::npos){
                 std::cout<<"Error: at getting method";
-                req->method ="error";
+                req->errorMessage = "Error at getting method";
+                req->error = true;
                 return req;
             }
             
@@ -140,7 +163,8 @@ class HandleHttp{
             //check if there are still items left in line
             if(part_end + 1 >= line.length()){
                 std::cout<<"Error: at getting url";
-                req->method = "error";
+                req->errorMessage = "Error at getting url";
+                req->error = true;
                 return req;
             }
             //remove method from line
@@ -158,6 +182,10 @@ class HandleHttp{
     
         }
 
+
+
+
+
         std::string getTime(){
             time_t rawtime;
             struct tm * timeinfo;
@@ -172,7 +200,13 @@ class HandleHttp{
             return timeString;
         }
 
-        std::string generate404(){
+
+
+
+
+        std::string generate404(int connfd, std::string fileRequested){
+            std::string displayMessage = std::string("<!doctype html><head><title>404 File Not Found</title><h1>404 File Not Found<h1></head><body><h2>The file requested: ") +  fileRequested + std::string(" is not found</h2></body></html>");
+            std::string extraLogInfo = std::string("Extra info\nConnfd: ") + std::to_string(connfd) + std::string("\nIP: ") + this->ip_str + std::string("\nFile Requested: " )+ fileRequested + std::string("\n");
 
             std::string response;
             response = this->version;
@@ -180,14 +214,21 @@ class HandleHttp{
             response += "Date: " + getTime() + "\r\n";
             response += "Server: tywuab \r\n";
             response += "Content-Type: text/html; charset=utf-8\r\n";
-            response += "Content-Length: 23\r\n";
+            response += "Content-Length: " + std::to_string(displayMessage.length()) + "\r\n";
+            this->writeToLog(response + extraLogInfo);
             response += "\r\n";
-            this->writeToLog(response);
-            response += "<h1>File Not Found</h1>";
+            response += displayMessage;
             return response;
         }
 
-        std::string generate501(){
+
+
+
+
+        std::string generate501(int connfd){
+
+            std::string displayMessage = std::string("<!doctype html<head><title>501 Method Not Allowed</title><h1>501 Method Not Allowed<h1></head><body><h2>The method: ") +  this->method + std::string(", is not supported, only GET is supported</h2></body></html>");
+            std::string extraLogInfo = std::string("Extra info\nConnfd: ") + std::to_string(connfd) + std::string("\nIP: ") + this->ip_str + std::string("\nMethod: ") + this->method + std::string("\n");
 
             std::string response;
             response = this->version;
@@ -195,14 +236,21 @@ class HandleHttp{
             response += "Date: " + getTime() + "\r\n";
             response += "Server: tywuab \r\n";
             response += "Content-Type: text/html; charset=utf-8\r\n";
-            response += "Content-Length: 27\r\n";
+            response += "Content-Length: " + std::to_string(displayMessage.length()) + "\r\n";
+            this->writeToLog(response + extraLogInfo);
             response += "\r\n";
-            this->writeToLog(response);
-            response += "<h1>Method not allowed</h1>";
+            response += displayMessage;
             return response;
         }
 
-        std::string generate415(){
+
+
+
+
+        std::string generate415(int connfd, std::string extension){
+
+            std::string displayMessage = std::string("<!doctype html<head><title>415 Unsupported Media Type</title><h1>415 Unsupported Media Type<h1></head><body><h2>The extension specified: ") +  extension + std::string(", is not supported</h2></body></html>");
+            std::string extraLogInfo = std::string("Extra info\nConnfd: ") + std::to_string(connfd) + std::string("\nIP: ") + this->ip_str + std::string("\nRequested Extension: ") + extension + std::string("\n");
 
             std::string response;
             response = this->version;
@@ -210,12 +258,37 @@ class HandleHttp{
             response += "Date: " + getTime() + "\r\n";
             response += "Server: tywuab \r\n";
             response += "Content-Type: text/html; charset=utf-8\r\n";
-            response += "Content-Length: 48\r\n";
+            response += "Content-Length: " + std::to_string(displayMessage.length()) + "\r\n";
+            this->writeToLog(response + extraLogInfo);
             response += "\r\n";
-            this->writeToLog(response);
-            response += "<h1>The file you specified is not supported</h1>";
+            response += displayMessage;
             return response;
         }
+        
+
+
+
+
+        std::string generate400(int connfd){
+            std::string displayMessage = std::string("<!doctype html<head><title>400 Bad Request</title><h1>400 Bad Request<h1></head><body><h2>There is something wrong with your request, please try again</h2></body></html>");
+            std::string extraLogInfo = std::string("Extra info\nConnfd: ") + std::to_string(connfd) + std::string("\nIP: ") + this->ip_str + std::string("\nRequested method: ") + this->method + std::string("\nRequested URL:") + this->url_path + std::string("\nError Message:") + this->errorMessage + std::string("\n");
+
+            std::string response;
+            response = this->version;
+            response +="  400 Bad Request\r\n";
+            response += "Date: " + getTime() + "\r\n";
+            response += "Server: tywuab \r\n";
+            response += "Content-Type: text/html; charset=utf-8\r\n";
+            response += "Content-Length: " + std::to_string(displayMessage.length()) + "\r\n";
+            this->writeToLog(response + extraLogInfo);
+            response += "\r\n";
+            response += displayMessage;
+            return response;
+        }
+
+
+
+
 
         void sendResponse(int connfd, std::string response){
             write(connfd, response.c_str(), response.length());
@@ -223,15 +296,26 @@ class HandleHttp{
             return;
         }
 
+
+
+
+
         void generateResponse(int connfd){
             std::string response = " ";
 
-            //bad request if not get
-            if(this->method != "GET" && this->method == "POST"){
-                sendResponse(connfd, this->generate501());
+            if(this->error){
+                sendResponse(connfd, this->generate400(connfd));
                 close(connfd);
                 return;
             }
+
+            //bad request if not get
+            if(this->method != "GET"){
+                sendResponse(connfd, this->generate501(connfd));
+                close(connfd);
+                return;
+            }
+
 
             //start file response
             char buff[BUFFERSIZE];
@@ -242,7 +326,7 @@ class HandleHttp{
 
             //check if file extension is supported
             if(FILE_TYPES.find(fileType) == FILE_TYPES.end()){
-                sendResponse(connfd, this->generate415());
+                sendResponse(connfd, this->generate415(connfd, fileType));
                 close(connfd);
                 return;
             }
@@ -266,7 +350,7 @@ class HandleHttp{
             if(!file.good()){
                 std::cout<<"Error: file not found";
                 std::cout << "\n";
-                sendResponse(connfd, this->generate404());
+                sendResponse(connfd, this->generate404(connfd, filePath));
                 close(connfd);
                 return;
 
@@ -344,7 +428,7 @@ class HandleHttp{
 };
 
 
-void threadHandler(int connfd){
+void threadHandler(int connfd, std::string(ip_str)){
 
     HandleHttp *req = NULL;
     int buffSize = 0;
@@ -359,12 +443,16 @@ void threadHandler(int connfd){
             break;
         }
     }
-    req = req->parse(message);
+
+    req = req->parse(message, ip_str);
+    //======[Debug]=======
     std::cout << req->method;
     std::cout << "\n";
     std::cout << req->url_path;
     std::cout << "\n";
     std::cout << req->version;
+    std::cout << "\n";
+    std::cout << req->ip_str;
     std::cout << "\n";
 
     req->generateResponse(connfd);
@@ -420,7 +508,7 @@ int main(int argc, char **argv){
         std::cout << "Incoming connection from: " << ip_str << " with fd: \n" << ntohs(cliaddr.sin_port) << connfd;
         std::cout << "\n";
     
-        std::thread newReq (threadHandler, connfd);
+        std::thread newReq (threadHandler, connfd, std::string(ip_str));
         newReq.detach();
     }
 }

@@ -1,9 +1,10 @@
 <!doctype html>
     <html>
         <head>
+            <script src="post.js"></script> 
             <link rel="stylesheet" type="text/css" href="stylesheet.css"/>
             <title>Index Page</title>
-    </head>
+        </head>
     <body>
         <div id="titles">
             <h1>Demo webpage</h1>
@@ -13,6 +14,10 @@
             </div>
         </div>
         <h2>This is the testing page for the server</h2>
+        <input type="button" onclick="location.href='index.html';" value="Go to index page" />
+        <input type="button" onclick="location.href='extra.html';" value="Go to extra page" />
+        <br>
+        <br>
         <a href="downloads/2B.png"><img src="downloads/2B.png"></a>
         <div id = "image">
             <a href= "downloads/2B.png">2B.png</p>
@@ -20,10 +25,23 @@
         <br>
         <div class ="downloads"><a href="log.txt">View Log</a></div>
         <br>
-        <div class ="downloads"><a href="downloads/zzzabc.docx">Try to request a file that does not exist</a></div>
         <br>
-        <div class ="downloads"><a href="downloads/zzzabc.mpeg">Try to request mpeg, an extension that isn't supported</a></div>
+        <input type="button" onclick="sendPost();" value= "Send a post request to the server"/>
         <br>
-        <input type="button" onclick="location.href='index.html';" value="Go to index page" />
+        <br>
+        <input type="button" onclick="badReq();" value= "Send a bad request to the server"/>
+        <br>
+        <br>
+        <input type="button" onclick="location.href='downloads/zzzabc.docx';" value = "Request a file that does not exist"/>
+        <br>
+        <br>
+        <input type="button" onclick="location.href='downloads/zzzabc.mpeg';" value = "Request mpeg, an extension that isn't supported"/>
+        <br>
+        <div class ="downloads"><a href="downloads/zzzabc.docx">Request a file that does not exist</a></div>
+        <br>
+        <div class ="downloads"><a href="downloads/zzzabc.mpeg">Request mpeg, an extension that isn't supported</a></div>
+        <br>
+        <div class ="downloads"><a href="downloads/COMP4621_Network_Project.pdf">Download COMP4621_Network_Project.pdf</a></div>
+        <br>
     </body>
 </html>
