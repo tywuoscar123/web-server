@@ -5,12 +5,15 @@
 #include <netinet/in.h>
 #include <time.h>   
 #include <thread>
-#include <iostream>
 #include <limits>
 #include <arpa/inet.h>
 #include <chrono>
 #include <ctime>
 #include <unistd.h>
+#include <map>
+#include <iostream>
+#include <fstream>
+#include <sstream>
 
 #define SERVER_PORT (12345)
 #define LISTENNQ (5)
@@ -18,14 +21,17 @@
 #define MAXTHREAD (5)
 
 
+std::map<std::string, std::string> FILE_TYPES{
+            {"html", "text/html"},
+            {"txt", "text/plain"}
+            
+};
 
 class HandleHttp{
     
     public:
         //map all files
-        static const std::map<std::string, std::string> FILE_TYPES{
-            {txt, text/plain}
-        }
+
         std::string url_path;
         std::string version; 
         std::string method;
@@ -74,6 +80,9 @@ class HandleHttp{
             std::string tmp = line.substr(part_end + 1, end_line);
             part_end = tmp.find(space);
             req->url_path = tmp.substr(start_get, part_end);
+            if(req->url_path == "/"){
+                req->url_path = "/index.html";
+            }
 
             //get version
             req->version = tmp.substr(part_end + 1, end_line);
@@ -126,20 +135,82 @@ class HandleHttp{
 
         void sendResponse(int connfd, std::string response){
             write(connfd, response.c_str(), response.length());
+            close(connfd);
             return;
         }
 
         void generateResponse(int connfd){
+            std::cout<<"GENERATE RESPONSE";
+            std::cout << "\n";
             std::string response = " ";
+
             //bad request if not get
             if(this->method != "GET" && this->method == "POST"){
                 sendResponse(connfd, this->generate501());
             }
-            char buff[BUFFERSIZE];
-            
-            sendResponse(connfd, this->generate404());
-            return;
+            std:: cout<< "start normal response";
+            std::cout << "\n";
 
+            //start file response
+            char buff[BUFFERSIZE];
+
+            //get file type
+            int extension_start = this->url_path.find(".");
+            std::string fileType = this->url_path.substr(extension_start+1, this->url_path.length());
+            std::cout << "file type is :" << fileType;
+            std::cout << "\n";
+            std::string contentType = FILE_TYPES[fileType];
+            std::cout << "content type is :" << contentType;
+            std::cout << "\n";
+            int content_end = contentType.find("/");
+            std::string filePath = this->url_path.substr(1, this->url_path.length());
+            std::cout << "filePath is :" << filePath;
+            std::cout << "\n";
+            std::cout << "condition is :" << contentType.substr(0, content_end);
+            std::cout << "\n";
+
+            auto flags = std::ifstream::in;
+            if(contentType.substr(0, content_end) != "text"){
+                flags |= std::ifstream::binary;
+
+            }
+
+            //open file
+             std::ifstream file(filePath.c_str(), flags);
+
+            //check if file is found
+            if(!file.good()){
+                std::cout<<"Error: file not found";
+                std::cout << "\n";
+                sendResponse(connfd, this->generate404());
+                return;
+            }else{
+                //read file
+                std::stringstream fileContent;
+                fileContent << file.rdbuf();
+                file.close();
+
+                //get file content in string
+                std::string stringContent = fileContent.str();
+                std::cout<< "File content: "<< stringContent;
+                std::cout<< "\n";
+                std::string contentLength = std::to_string(stringContent.length());
+                //generate response
+                std::string response = "HTTP/1.1 200 OK\r\n";
+                response += "Date: " + getTime() + "\r\n";
+                response += "Server: tywuab\r\n";
+                response += "Content-Type: " + contentType + "\r\n";
+                response += "Content-Length: " + contentLength + "\r\n";
+                response += "\r\n";
+                response += fileContent.str();
+
+                std::cout<< "Response: "<< response;
+                std::cout<< "\n";
+                sendResponse(connfd, response);
+                return;
+            }
+            close(connfd);
+            return;
          }
 
 };
