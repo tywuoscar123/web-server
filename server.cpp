@@ -114,7 +114,7 @@ class HandleHttp{
 
         }
 
-        void writeToLog(std::string header){
+        static void writeToLog(std::string header){
             std::ofstream logFile;
             logFile.open("log.txt", std::ios::app);
             if(!logFile.good()){
@@ -340,7 +340,7 @@ class HandleHttp{
             auto flags = std::ifstream::in;
             if(contentType.substr(0, content_end) != "text"){
                 flags |= std::ifstream::binary;
-                compress = true;
+                compress = false;
             }
 
             //open file
@@ -366,7 +366,7 @@ class HandleHttp{
                 std::string contentLength = std::to_string(stringContent.length());
                 
                 //check if need to compress, this is for when you only want to compress binary or text files
-                if(true){
+                if(compress){
                     std::string compressed_content = compress_string(stringContent);
                     std::string compressed_size = std::to_string(compressed_content.length());
 
@@ -390,6 +390,7 @@ class HandleHttp{
                     response += " 200 OK\r\n";
                     response += "Date: " + getTime() + "\r\n";
                     response += "Server: tywuab\r\n";
+                    response += "Content-Type: " + contentType + "\r\n";
                     response += "Content-Encoding: gzip\r\n";
                     response += "Content-Length: " + compressed_size + "\r\n";
 
@@ -443,6 +444,8 @@ void threadHandler(int connfd, std::string(ip_str)){
             break;
         }
     }
+
+    HandleHttp::writeToLog(message);
 
     req = req->parse(message, ip_str);
     //======[Debug]=======
